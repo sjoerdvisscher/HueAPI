@@ -10,6 +10,7 @@ module HueAPI (
   , HueMonad
   , runHueMonad
   
+  , getState
   , getLightState
   , updateLight
   , initLight
@@ -67,16 +68,24 @@ instance FromJSON Group where
 type HueMonad = StateT HueData (ReaderT String IO)
 
 runHueMonad :: String -> String -> HueMonad a -> IO a
-runHueMonad host key api =
-  let url = "http://" ++ host ++ "/api/" ++ key ++ "/" in
-  withSocketsDo $ do
-    connect key host
-    request' <- parseUrl url
-    let request = request' { responseTimeout = Nothing }
-    resp <- withManager $ httpLbs request
-    d <- either fail return (eitherDecode (responseBody resp))
-    runReaderT (fst <$> runStateT api d) url
+runHueMonad host key hm = do
+    hueData <- withSocketsDo go
+    runReaderT (fst <$> runStateT hm hueData) url
+  where
+    url = "http://" ++ host ++ "/api/" ++ key ++ "/"
+    go = do
+      request' <- parseUrl url
+      let request = request' { responseTimeout = Nothing }
+      resp <- withManager $ httpLbs request
+      either doConnect return (eitherDecode (responseBody resp))
+    doConnect _ = do
+      putStrLn "Press the link button on the base station"
+      connect key host
+      go
+      
 
+getState :: HueMonad HueData
+getState = get
 
 getLightState :: Name -> HueMonad LightState
 getLightState name = do
@@ -138,6 +147,5 @@ connect key host = do
     }
   resp <- withManager (httpLbs request)
   if B.null . snd . B.breakSubstring "error" . B.toStrict $ responseBody resp then return () else do
-    liftIO $ print resp
     liftIO $ threadDelay 100000
     connect key host
