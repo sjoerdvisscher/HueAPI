@@ -1,7 +1,10 @@
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Applicative
 import Data.Time.Clock
+import Data.Map.Strict (toList)
+import System.Random
 
 import HueAPI
 
@@ -18,9 +21,21 @@ kitt = do
     updateLight name LightState { on = True, bri = if m then 255 else 0, hue = 10000, sat = 255 }
   kitt
 
+candleLight :: HueMonad ()
+candleLight = do
+  ls <- lights <$> getState
+  forM (toList ls) $ \(name, _) -> do
+    b <- liftIO $ randomRIO (0, 20)
+    h <- liftIO $ randomRIO (10000, 15000)
+    s <- liftIO $ randomRIO (150, 255)
+    updateLight name LightState { on = True, bri = b, hue = h, sat = s }
+  candleLight
+
 main :: IO ()
 main = do
   forkIO $ runHueMonad "10.42.9.38" "haskellforhue" $ do
     forM lightSeq $ \name -> initLight name LightState { on = True, bri = 0, hue = 10000, sat = 255 }
     kitt
+  void getLine
+  forkIO $ runHueMonad "10.42.9.38" "haskellforhue" candleLight
   void getLine
