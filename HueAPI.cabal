@@ -1,0 +1,23 @@
+name:                HueAPI
+version:             0
+synopsis:            API for controlling Philips Hue lights
+description:
+homepage:            https://github.com/sjoerdvisscher/HueAPI
+license:             BSD3
+license-file:        LICENSE
+author:              Sjoerd Visscher
+maintainer:          sjoerd@q42.nl
+category:            Hardware
+build-type:          Simple
+cabal-version:       >=1.8
+
+library
+  exposed-modules:     HueAPI
+  build-depends:       base ==4.6.*,
+                       aeson ==0.6.*,
+                       bytestring ==0.10.*,
+                       http-conduit ==1.8.*,
+                       network ==2.4.*,
+                       containers ==0.5.*,
+                       transformers ==0.3.*,
+                       mtl ==2.1.*
