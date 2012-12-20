@@ -11,14 +11,14 @@ import HueAPI
 
 lightSeq = map show [22,18,21,15,26,19,23,20,16,17,13,12,10,11,4,7,1,3,9,2,5,6,8,14,24,25,27,28,29]
 
-kitt :: HueMonad ()
+kitt :: Hue ()
 kitt = forever $ forM (zip [0..] $ drop 14 lightSeq) $ \(i, name) -> do
   time <- liftIO getCurrentTime
   let t = fromRational . toRational . utctDayTime $ time
   let m = abs (15 * (sin t + 1) / 2 - fromInteger i) < 1.7
   updateLight name LightState { on = True, bri = if m then 255 else 0, hue = 0, sat = 255 }
 
-candleLight :: HueMonad ()
+candleLight :: Hue ()
 candleLight = do
   ls <- toList . lights <$> getState
   forever $ do
@@ -30,9 +30,9 @@ candleLight = do
 
 main :: IO ()
 main = do
-  forkIO $ runHueMonad "10.42.9.38" "haskellforhue" $ do
+  forkIO $ runHue "10.42.9.38" "haskellforhue" $ do
     forM lightSeq $ \name -> initLight name LightState { on = False, bri = 0, hue = 0, sat = 255 }
     kitt
   void getLine
-  forkIO $ runHueMonad "10.42.9.38" "haskellforhue" candleLight
+  forkIO $ runHue "10.42.9.38" "haskellforhue" candleLight
   void getLine

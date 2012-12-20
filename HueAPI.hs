@@ -7,8 +7,8 @@ module HueAPI (
   , Group(..)
   , Name
   
-  , HueMonad
-  , runHueMonad
+  , Hue
+  , runHue
   
   , getState
   , getLightState
@@ -19,7 +19,7 @@ module HueAPI (
 
 import GHC.Generics
 import Data.Aeson
-import qualified Data.ByteString.Lazy as B
+import Data.ByteString.Lazy.UTF8 (fromString)
 import Network.HTTP.Conduit
 import Network
 import Data.Map.Strict (Map, toList, (!), adjust)
@@ -29,6 +29,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State (StateT(..), get, put)
 import Control.Monad.Reader (ReaderT(..), ask)
 import Control.Concurrent
+
 
 type Name = String
 
@@ -71,10 +72,10 @@ instance FromJSON HueError where
   parseJSON (Object v) = HueError <$> v .: "type" <*> v .: "description"
 
 
-type HueMonad = StateT HueData (ReaderT String IO)
+type Hue = StateT HueData (ReaderT String IO)
 
-runHueMonad :: String -> String -> HueMonad a -> IO a
-runHueMonad host key hm = do
+runHue :: String -> String -> Hue a -> IO a
+runHue host key hm = do
     hueData <- withSocketsDo go
     runReaderT (fst <$> runStateT hm hueData) url
   where
@@ -90,16 +91,16 @@ runHueMonad host key hm = do
       go
       
 
-getState :: HueMonad HueData
+getState :: Hue HueData
 getState = get
 
-getLightState :: Name -> HueMonad LightState
+getLightState :: Name -> Hue LightState
 getLightState name = do
   d <- get
   return $ state $ lights d ! name
 
 
-updateLight :: Name -> LightState -> HueMonad ()
+updateLight :: Name -> LightState -> Hue ()
 updateLight name l = do
   l' <- getLightState name
   when (on l /= on l') $
@@ -115,7 +116,7 @@ updateLight name l = do
   put $ d { lights = adjust (\light -> light { state = if on l then l else l' { on = False } }) name (lights d) }
 
 
-initLight :: Name -> LightState -> HueMonad ()
+initLight :: Name -> LightState -> Hue ()
 initLight name l = do
   updateLightProp name "on" "true"
   updateLightProp name "bri" (show $ bri l)
@@ -126,13 +127,13 @@ initLight name l = do
   put $ d { lights = adjust (\light -> light { state = l }) name (lights d) }
   
   
-updateLightProp :: Name -> String -> String -> HueMonad ()
+updateLightProp :: Name -> String -> String -> Hue ()
 updateLightProp name prop value = do
   url <- ask
   resp <- liftIO $ withSocketsDo $ do
     initReq <- parseUrl $ url ++ "lights/" ++ name ++ "/state"
     let request = initReq {
-        requestBody = RequestBodyLBS (B.pack $ map(toEnum.fromEnum) $ "{\"" ++ prop ++ "\":" ++ value ++ "}")
+        requestBody = RequestBodyLBS (fromString $ "{\"" ++ prop ++ "\":" ++ value ++ "}")
       , method = "PUT"
       , responseTimeout = Nothing
       }
@@ -148,7 +149,7 @@ connect :: String -> String -> IO ()
 connect key host = do
   initReq <- parseUrl $ "http://" ++ host ++ "/api/"
   let request = initReq {
-      requestBody = RequestBodyLBS (B.pack $ map(toEnum.fromEnum) $
+      requestBody = RequestBodyLBS (fromString $
         "{\"username\":\"" ++ key ++ "\",\"devicetype\":\"Unknown\"}")
     , method = "POST"
     , responseTimeout = Nothing

@@ -1,5 +1,5 @@
 name:                HueAPI
-version:             0
+version:             0.1
 synopsis:            API for controlling Philips Hue lights
 description:
 homepage:            https://github.com/sjoerdvisscher/HueAPI
@@ -15,7 +15,7 @@ library
   exposed-modules:     HueAPI
   build-depends:       base ==4.6.*,
                        aeson ==0.6.*,
-                       bytestring ==0.10.*,
+                       utf8-string ==0.3.*,
                        http-conduit ==1.8.*,
                        network ==2.4.*,
                        containers ==0.5.*,
