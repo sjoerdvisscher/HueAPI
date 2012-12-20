@@ -19,8 +19,7 @@ module HueAPI (
 
 import GHC.Generics
 import Data.Aeson
-import qualified Data.ByteString as B (breakSubstring, null)
-import qualified Data.ByteString.Lazy as B hiding (null)
+import qualified Data.ByteString.Lazy as B
 import Network.HTTP.Conduit
 import Network
 import Data.Map.Strict (Map, toList, (!), adjust)
@@ -63,6 +62,13 @@ instance FromJSON Light
 instance FromJSON LightState
 instance FromJSON Group where
   parseJSON (Object v) = Group <$> v .: "action" <*> v .: "name" <*> v .: "lights"
+
+data HueResult = HueResult HueError deriving Show
+instance FromJSON HueResult where
+  parseJSON (Object v) = HueResult <$> v .: "error"
+data HueError = HueError Int String deriving Show
+instance FromJSON HueError where
+  parseJSON (Object v) = HueError <$> v .: "type" <*> v .: "description"
 
 
 type HueMonad = StateT HueData (ReaderT String IO)
@@ -131,10 +137,12 @@ updateLightProp name prop value = do
       , responseTimeout = Nothing
       }
     withManager (httpLbs request)
-  if B.null . snd . B.breakSubstring "Internal error, 503" . B.toStrict $ responseBody resp then return () else do
-    liftIO $ print resp
-    liftIO $ threadDelay 100000
-    updateLightProp name prop value
+  case eitherDecode $ responseBody resp of
+    Right [HueResult (HueError 901 _)] -> do
+      liftIO $ threadDelay 100000
+      updateLightProp name prop value
+    Right [HueResult (HueError i m)] -> fail $ "Error " ++ show i ++ ": " ++ m
+    _ -> return ()
 
 connect :: String -> String -> IO ()
 connect key host = do
@@ -146,6 +154,9 @@ connect key host = do
     , responseTimeout = Nothing
     }
   resp <- withManager (httpLbs request)
-  if B.null . snd . B.breakSubstring "error" . B.toStrict $ responseBody resp then return () else do
-    liftIO $ threadDelay 100000
-    connect key host
+  case eitherDecode $ responseBody resp of
+    Right [HueResult (HueError 101 _)] -> do
+      liftIO $ threadDelay 100000
+      connect key host
+    Right [HueResult (HueError i m)] -> fail $ "Error " ++ show i ++ ": " ++ m
+    _ -> return ()
