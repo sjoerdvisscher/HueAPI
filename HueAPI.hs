@@ -19,10 +19,9 @@ module HueAPI (
 
 import GHC.Generics
 import Data.Aeson
-import Data.ByteString.Lazy.UTF8 (fromString)
 import Network.HTTP.Conduit
 import Network
-import Data.Map.Strict (Map, toList, (!), adjust)
+import Data.Map.Strict (Map, fromList, (!), adjust)
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
@@ -84,7 +83,7 @@ runHue host key hm = do
       request' <- parseUrl url
       let request = request' { responseTimeout = Nothing }
       resp <- withManager $ httpLbs request
-      either doConnect return (eitherDecode (responseBody resp))
+      either doConnect return $ eitherDecode $ responseBody resp
     doConnect _ = do
       putStrLn "Press the link button on the base station"
       connect key host
@@ -103,61 +102,69 @@ getLightState name = do
 updateLight :: Name -> LightState -> Hue ()
 updateLight name l = do
   l' <- getLightState name
-  when (on l /= on l') $
-    updateLightProp name "on" (if on l then "true" else "false")
-  when (on l) $ do
-    when (bri l /= bri l') $
-      updateLightProp name "bri" (show $ bri l)
-    when (hue l /= hue l') $
-      updateLightProp name "hue" (show $ hue l)
-    when (sat l /= sat l') $
-      updateLightProp name "sat" (show $ sat l)
+  if on l then do
+    when (not $ on l') $ updateLightProps name [("on", True)]
+    updateLightProps name $
+         [("bri", toJSON $ bri l)|bri l /= bri l']
+      ++ [("hue", toJSON $ hue l)|hue l /= hue l']
+      ++ [("sat", toJSON $ sat l)|sat l /= sat l']
+  else
+    when (on l') $ updateLightProps name [("on", False)]
   d <- get
   put $ d { lights = adjust (\light -> light { state = if on l then l else l' { on = False } }) name (lights d) }
 
 
 initLight :: Name -> LightState -> Hue ()
 initLight name l = do
-  updateLightProp name "on" "true"
-  updateLightProp name "bri" (show $ bri l)
-  updateLightProp name "hue" (show $ hue l)
-  updateLightProp name "sat" (show $ sat l)
-  updateLightProp name "on" (if on l then "true" else "false")
+  updateLightProps name [("on", True)]
+  updateLightProps name $
+    [ ("bri", toJSON $ bri l)
+    , ("hue", toJSON $ hue l)
+    , ("sat", toJSON $ sat l)
+    ]
+  updateLightProps name [("on", on l)]
   d <- get
   put $ d { lights = adjust (\light -> light { state = l }) name (lights d) }
   
+map2json :: ToJSON a => [(String, a)] -> RequestBody m
+map2json = RequestBodyLBS . encode . fromList
   
-updateLightProp :: Name -> String -> String -> Hue ()
-updateLightProp name prop value = do
+updateLightProps :: ToJSON a => Name -> [(String, a)] -> Hue ()
+updateLightProps _ [] = return ()
+updateLightProps name m = do
   url <- ask
   resp <- liftIO $ withSocketsDo $ do
     initReq <- parseUrl $ url ++ "lights/" ++ name ++ "/state"
     let request = initReq {
-        requestBody = RequestBodyLBS (fromString $ "{\"" ++ prop ++ "\":" ++ value ++ "}")
+        requestBody = map2json m
       , method = "PUT"
       , responseTimeout = Nothing
       }
     withManager (httpLbs request)
   case eitherDecode $ responseBody resp of
-    Right [HueResult (HueError 901 _)] -> do
+    Right [HueResult (HueError i msg)] -> do
+      when (i /= 901) $ -- Don't print internal server errors
+        liftIO $ putStrLn $ "Error " ++ show i ++ ": " ++ msg
       liftIO $ threadDelay 100000
-      updateLightProp name prop value
-    Right [HueResult (HueError i m)] -> fail $ "Error " ++ show i ++ ": " ++ m
+      updateLightProps name m
     _ -> return ()
 
 connect :: String -> String -> IO ()
 connect key host = do
   initReq <- parseUrl $ "http://" ++ host ++ "/api/"
   let request = initReq {
-      requestBody = RequestBodyLBS (fromString $
-        "{\"username\":\"" ++ key ++ "\",\"devicetype\":\"Unknown\"}")
+      requestBody = map2json
+        [ ("username", key)
+        , ("devicetype", "Unknown")
+        ]
     , method = "POST"
     , responseTimeout = Nothing
     }
   resp <- withManager (httpLbs request)
   case eitherDecode $ responseBody resp of
-    Right [HueResult (HueError 101 _)] -> do
-      liftIO $ threadDelay 100000
+    Right [HueResult (HueError i msg)] -> do
+      when (i /= 101) $ -- Don't print "press the button" errors
+        putStrLn $ "Error " ++ show i ++ ": " ++ msg
+      threadDelay 100000
       connect key host
-    Right [HueResult (HueError i m)] -> fail $ "Error " ++ show i ++ ": " ++ m
     _ -> return ()
