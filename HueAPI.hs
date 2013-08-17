@@ -1,4 +1,4 @@
- {-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
+ {-# LANGUAGE OverloadedStrings, DeriveGeneric, DoAndIfThenElse #-}
 module HueAPI (
   
     HueData(..)
