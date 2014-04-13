@@ -126,7 +126,7 @@ initLight name l = do
   d <- get
   put $ d { lights = adjust (\light -> light { state = l }) name (lights d) }
   
-map2json :: ToJSON a => [(String, a)] -> RequestBody m
+map2json :: ToJSON a => [(String, a)] -> RequestBody
 map2json = RequestBodyLBS . encode . fromList
   
 updateLightProps :: ToJSON a => Name -> [(String, a)] -> Hue ()
