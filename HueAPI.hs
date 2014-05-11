@@ -25,8 +25,8 @@ import Data.Map.Strict (Map, fromList, (!), adjust)
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.State (StateT(..), get, put)
-import Control.Monad.Reader (ReaderT(..), ask)
+import Control.Monad.State (StateT(StateT), runStateT, get, put)
+import Control.Monad.Reader (ReaderT(ReaderT), runReaderT, ask)
 import Control.Concurrent
 
 

@@ -4,3 +4,6 @@
 *.o
 
 example
+
+cabal.sandbox.config
+.cabal-sandbox
