@@ -1,34 +1,34 @@
  {-# LANGUAGE OverloadedStrings, DeriveGeneric, DoAndIfThenElse #-}
 module HueAPI (
-  
+
     HueData(..)
   , Light(..)
   , LightState(..)
   , Group(..)
   , Name
-  
+
   , Hue
   , runHue
-  
+
   , getState
   , getLightState
   , updateLight
   , initLight
-  
+
 ) where
 
 import GHC.Generics
 import Data.Aeson
-import Network.HTTP.Conduit
-import Network
+import Data.Aeson.Lens (_JSON)
 import Data.Map.Strict (Map, fromList, (!), adjust)
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.State (StateT(StateT), runStateT, get, put)
-import Control.Monad.Reader (ReaderT(ReaderT), runReaderT, ask)
+import Control.Monad.State (StateT(..), runStateT, get, put)
+import Control.Monad.Reader (ReaderT(..), runReaderT, ask)
 import Control.Concurrent
-
+import Control.Lens
+import qualified Network.Wreq as Wreq
 
 type Name = String
 
@@ -36,14 +36,14 @@ data HueData = Hue
   { lights :: Map Name Light
   , groups :: Map Name Group
   } deriving (Show, Generic)
-  
+
 data Light = Light
   { state :: LightState
   , name :: Name
   , modelid :: String
   , swversion :: String
   } deriving (Show, Generic)
-  
+
 data LightState = LightState
   { on :: Bool
   , bri :: Int
@@ -55,7 +55,7 @@ data Group = Group
   { action :: LightState
   , groupName :: Name
   , groupLights :: [Name]
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 instance FromJSON HueData
 instance FromJSON Light
@@ -63,32 +63,37 @@ instance FromJSON LightState
 instance FromJSON Group where
   parseJSON (Object v) = Group <$> v .: "action" <*> v .: "name" <*> v .: "lights"
 
-data HueResult = HueResult HueError deriving Show
+instance ToJSON HueData
+instance ToJSON Light
+instance ToJSON LightState
+instance ToJSON Group
+
+data HueResult = HueResult HueError deriving (Show, Generic)
 instance FromJSON HueResult where
   parseJSON (Object v) = HueResult <$> v .: "error"
-data HueError = HueError Int String deriving Show
+instance ToJSON HueResult
+data HueError = HueError Int String deriving (Show, Generic)
 instance FromJSON HueError where
   parseJSON (Object v) = HueError <$> v .: "type" <*> v .: "description"
+instance ToJSON HueError
 
 
 type Hue = StateT HueData (ReaderT String IO)
 
 runHue :: String -> String -> Hue a -> IO a
 runHue host key hm = do
-    hueData <- withSocketsDo go
+    hueData <- go
     runReaderT (fst <$> runStateT hm hueData) url
   where
     url = "http://" ++ host ++ "/api/" ++ key ++ "/"
     go = do
-      request' <- parseUrl url
-      let request = request' { responseTimeout = Nothing }
-      resp <- withManager $ httpLbs request
-      either doConnect return $ eitherDecode $ responseBody resp
-    doConnect _ = do
+      r <- Wreq.get url
+      maybe doConnect return $ r ^? Wreq.responseBody . _JSON
+    doConnect = do
       putStrLn "Press the link button on the base station"
       connect key host
       go
-      
+
 
 getState :: Hue HueData
 getState = get
@@ -125,24 +130,14 @@ initLight name l = do
   updateLightProps name [("on", on l)]
   d <- get
   put $ d { lights = adjust (\light -> light { state = l }) name (lights d) }
-  
-map2json :: ToJSON a => [(String, a)] -> RequestBody
-map2json = RequestBodyLBS . encode . fromList
-  
+
 updateLightProps :: ToJSON a => Name -> [(String, a)] -> Hue ()
 updateLightProps _ [] = return ()
 updateLightProps name m = do
   url <- ask
-  resp <- liftIO $ withSocketsDo $ do
-    initReq <- parseUrl $ url ++ "lights/" ++ name ++ "/state"
-    let request = initReq {
-        requestBody = map2json m
-      , method = "PUT"
-      , responseTimeout = Nothing
-      }
-    withManager (httpLbs request)
-  case eitherDecode $ responseBody resp of
-    Right [HueResult (HueError i msg)] -> do
+  resp <- liftIO $ Wreq.put (url ++ "lights/" ++ name ++ "/state") $ toJSON (fromList m)
+  case resp ^? Wreq.responseBody . _JSON of
+    Just [HueResult (HueError i msg)] -> do
       when (i /= 901) $ -- Don't print internal server errors
         liftIO $ putStrLn $ "Error " ++ show i ++ ": " ++ msg
       liftIO $ threadDelay 100000
@@ -151,18 +146,12 @@ updateLightProps name m = do
 
 connect :: String -> String -> IO ()
 connect key host = do
-  initReq <- parseUrl $ "http://" ++ host ++ "/api/"
-  let request = initReq {
-      requestBody = map2json
-        [ ("username", key)
-        , ("devicetype", "Unknown")
-        ]
-    , method = "POST"
-    , responseTimeout = Nothing
-    }
-  resp <- withManager (httpLbs request)
-  case eitherDecode $ responseBody resp of
-    Right [HueResult (HueError i msg)] -> do
+  resp <- Wreq.post ("http://" ++ host ++ "/api/") $ toJSON $ fromList
+    [ ("username", key)
+    , ("devicetype" :: String, "Unknown" :: String)
+    ]
+  case resp ^? Wreq.responseBody . _JSON of
+    Just [HueResult (HueError i msg)] -> do
       when (i /= 101) $ -- Don't print "press the button" errors
         putStrLn $ "Error " ++ show i ++ ": " ++ msg
       threadDelay 100000
