@@ -8,15 +8,15 @@ import System.Random
 
 import HueAPI
 
-
-lightSeq = map show [22,18,21,15,26,19,23,20,16,17,13,12,10,11,4,7,1,3,9,2,5,6,8,14,24,25,27,28,29]
+lightSeq :: [String]
+lightSeq = map show [22,18,21,15,26,19,23,20,16,17,13,12,10,11,4,7,1,3,9,2,5,6,8,14,24,25,27,28,29 :: Int]
 
 kitt :: Hue ()
-kitt = forever $ forM (zip [0..] $ drop 14 lightSeq) $ \(i, name) -> do
+kitt = forever $ forM (zip [0..] $ drop 14 lightSeq) $ \(i, nm) -> do
   time <- liftIO getCurrentTime
   let t = fromRational . toRational . utctDayTime $ time
-  let m = abs (15 * (sin t + 1) / 2 - fromInteger i) < 1.7
-  updateLight name LightState { on = True, bri = if m then 255 else 0, hue = 0, sat = 255 }
+  let m = abs (15 * (sin t + 1) / 2 - fromInteger i) < (1.7 :: Double)
+  updateLight nm LightState { on = True, bri = if m then 255 else 0, hue = 0, sat = 255 }
 
 candleLight :: Hue ()
 candleLight = do
@@ -30,9 +30,9 @@ candleLight = do
 
 main :: IO ()
 main = do
-  forkIO $ runHue "10.42.9.38" "haskellforhue" $ do
-    forM lightSeq $ \name -> initLight name LightState { on = False, bri = 0, hue = 0, sat = 255 }
+  void $ forkIO $ runHue "10.42.9.38" "haskellforhue" $ do
+    forM_ lightSeq $ \nm -> initLight nm LightState { on = False, bri = 0, hue = 0, sat = 255 }
     kitt
   void getLine
-  forkIO $ runHue "10.42.9.38" "haskellforhue" candleLight
+  void $ forkIO $ runHue "10.42.9.38" "haskellforhue" candleLight
   void getLine
