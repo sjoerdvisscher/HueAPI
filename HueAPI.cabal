@@ -1,5 +1,5 @@
 name:                HueAPI
-version:             0.2.2
+version:             0.2.3
 synopsis:            API for controlling Philips Hue lights
 description:
 homepage:            https://github.com/sjoerdvisscher/HueAPI
@@ -20,4 +20,4 @@ library
                        mtl >=2.1 && <2.3,
                        lens >=4.4 && <5,
                        lens-aeson >=1 && <2,
-                       wreq <0.3
+                       wreq <0.4
