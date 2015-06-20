@@ -1,7 +1,7 @@
 name:                HueAPI
-version:             0.2.4
+version:             0.2.5
 synopsis:            API for controlling Philips Hue lights
-description:
+description:         API for controlling Philips Hue lights
 homepage:            https://github.com/sjoerdvisscher/HueAPI
 license:             BSD3
 license-file:        LICENSE
@@ -14,7 +14,7 @@ cabal-version:       >=1.8
 library
   exposed-modules:     HueAPI
   build-depends:       base >=4.6 && <4.9,
-                       aeson >=0.6 && <0.9,
+                       aeson >=0.6 && <0.10,
                        containers ==0.5.*,
                        transformers >=0.3 && <0.5,
                        mtl >=2.1 && <2.3,
