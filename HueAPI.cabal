@@ -21,3 +21,7 @@ library
                        lens >=4.4 && <5,
                        lens-aeson >=1 && <2,
                        wreq <0.5
+
+source-repository head
+  type:     git
+  location: git://github.com/sjoerdvisscher/HueAPI.git
